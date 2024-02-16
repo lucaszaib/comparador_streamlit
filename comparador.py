@@ -1,5 +1,11 @@
 import streamlit as st
 import pandas as pd
+import os
+import PyPDF2
+from ofxparse import OfxParser
+import tempfile
+
+
 
 st.set_page_config(
     page_title="Comparador",
@@ -49,62 +55,15 @@ def highlight_diff(row, color='yellow'):
         estilo[row.index.get_loc('Valor_Saldo_df2')] = 'background-color: {}'.format(color)
     return estilo
 
-
-
-
-def main():
-    st.title("Comparador de Extratos BANCOS x RAZÃO")
-    
-
-    # Upload dos arquivos
-    uploaded_file1 = st.file_uploader("SELECIONE EXTRATO DO BANCO", type=["xlsx", "xls"])
-    uploaded_file2 = st.file_uploader("SELECIONE EXTRATO RAZÃO SISTEMA DOMÍNIO", type=["xlsx", "xls"])
-
-    if uploaded_file1 is not None and uploaded_file2 is not None:
-        df1 = load_dataframe(uploaded_file1, header=2)  # Define o cabeçalho na linha 3
-        df2 = load_dataframe(uploaded_file2)
-
-        st.subheader("Conteúdo do arquivo 1")
-        df1_cleaned = df1.dropna(axis=1, how='all')  # Remove colunas que são todas None
-        st.write(df1_cleaned)
-
-        st.subheader("Conteúdo do arquivo 2")
-        df2_cleaned = df2.dropna(axis=1, how='all')  # Remove colunas que são todas None
-        st.write(df2_cleaned)
-
-        if df1_cleaned is not None and df2 is not None:
-            if 'VALOR' in df1_cleaned.columns and 'Saldo-Exercício' in df2.columns and 'Data' in df2.columns:
-                # Remove os valores de texto da coluna 'Data' em df2 e converte para datetime
-                df2['Data'] = pd.to_datetime(df2['Data'], errors='coerce')
-
-                # Remove as linhas com valores nulos na coluna 'Data'
-                df2 = df2.dropna(subset=['Data'])
-
-                datas_saldos_df1 = encontrar_ultima_data(df1_cleaned)
-
-                df2_last_of_day = df2.groupby(df2['Data'].dt.date).tail(1)
-
-                df_comparacao = pd.DataFrame({
-                    'Data Saldo Banco': datas_saldos_df1,
-                    'Valor_Saldo_df1': df1_cleaned.loc[df1_cleaned['HISTÓRICO'] == 'SALDO DO DIA ===== >', 'VALOR'].str.replace('.', '').str.replace(',', '.').str.rstrip('C').astype(float).values,
-                    'Data': df2_last_of_day['Data'].dt.strftime('%d/%m/%Y'),
-                    'Valor_Saldo_df2': df2_last_of_day['Saldo-Exercício'].values
-                })
-                
-
-                # Aplicar a função aos dados e estilizar o DataFrame
-                df_comparacao_styled = df_comparacao.style.apply(highlight_diff, axis=1)
-
-                df_comparacao_styled = df_comparacao_styled.format({
-                    'Valor_Saldo_df1': formatar_moeda,
-                    'Valor_Saldo_df2': formatar_moeda
-                })
-                df_comparacao_styled.set_table_styles([{'selector': 'table', 'props': [('height', '1600px')]}])
-                st.subheader("Comparação Extrato Banco e Razão Relatório :")
-                st.write(df_comparacao_styled, unsafe_allow_html=True)
-
-            else:
-                st.write("As colunas 'VALOR' e/ou 'Saldo-Exercício' e/ou 'Data' não foram encontradas nos arquivos.")
+# Função para ler um arquivo de texto
+def ler_texto(file):
+    try:
+        # Lê o conteúdo do arquivo de texto
+        content = pd.read_csv(file, sep=';', quotechar='"')
+        return content
+    except Exception as e:
+        st.error(f"Erro ao ler arquivo de texto: {e}")
+        return None
 
 def load_dataframe(uploaded_file, **kwargs):
     if uploaded_file.name.endswith('.xlsx') or uploaded_file.name.endswith('.xls'):
@@ -112,6 +71,165 @@ def load_dataframe(uploaded_file, **kwargs):
     else:
         st.error("Formato de arquivo não suportado.")
         return None
+
+def main():
+    st.title("Comparador de Extratos BANCOS x RAZÃO")
+    
+    opcoes_bancos = ['Selecione um Banco', 'SICOOB', 'Santander', 'Banrisul', 'Caixa Econômica', 'Bradesco']
+
+    banco_selecionado = st.selectbox("Selecione o Banco", opcoes_bancos)
+
+    if banco_selecionado == 'SICOOB':
+        uploaded_sicoob = st.file_uploader("Selecione Extrato SICOOB", type=["xlsx", "xls"])
+        # Upload Domínio Extrato Razão
+        uploaded_file2 = st.file_uploader("SELECIONE EXTRATO RAZÃO SISTEMA DOMÍNIO", type=["xlsx", "xls"])
+
+        if uploaded_sicoob is not None:
+
+            # Verifica a extensão do arquivo
+            _, file_extension = os.path.splitext(uploaded_sicoob.name)
+            
+            # Caso a extensão seja .xlsx ou .xls, lê o arquivo como Excel
+            if file_extension in ['.xlsx', '.xls']:
+
+                if uploaded_sicoob is not None and uploaded_file2 is not None:
+                    df1 = load_dataframe(uploaded_sicoob, header=2)  # Define o cabeçalho na linha 3
+                    df2 = load_dataframe(uploaded_file2)
+
+                    st.subheader("Conteúdo do arquivo 1")
+                    df1_cleaned = df1.dropna(axis=1, how='all')  # Remove colunas que são todas None
+                    st.write(df1_cleaned)
+
+                    st.subheader("Conteúdo do arquivo 2")
+                    df2_cleaned = df2.dropna(axis=1, how='all')  # Remove colunas que são todas None
+                    st.write(df2_cleaned)
+
+                    if df1_cleaned is not None and df2 is not None:
+                        if 'VALOR' in df1_cleaned.columns and 'Saldo-Exercício' in df2.columns and 'Data' in df2.columns:
+                            # Remove os valores de texto da coluna 'Data' em df2 e converte para datetime
+                            df2['Data'] = pd.to_datetime(df2['Data'], errors='coerce')
+
+                            # Remove as linhas com valores nulos na coluna 'Data'
+                            df2 = df2.dropna(subset=['Data'])
+
+                            datas_saldos_df1 = encontrar_ultima_data(df1_cleaned)
+
+                            df2_last_of_day = df2.groupby(df2['Data'].dt.date).tail(1)
+
+                            df_comparacao = pd.DataFrame({
+                                'Data Saldo Banco': datas_saldos_df1,
+                                'Valor_Saldo_df1': df1_cleaned.loc[df1_cleaned['HISTÓRICO'] == 'SALDO DO DIA ===== >', 'VALOR'].str.replace('.', '').str.replace(',', '.').str.rstrip('C').astype(float).values,
+                                'Data': df2_last_of_day['Data'].dt.strftime('%d/%m/%Y'),
+                                'Valor_Saldo_df2': df2_last_of_day['Saldo-Exercício'].values
+                            })
+                            
+
+                            # Aplicar a função aos dados e estilizar o DataFrame
+                            df_comparacao_styled = df_comparacao.style.apply(highlight_diff, axis=1)
+
+                            df_comparacao_styled = df_comparacao_styled.format({
+                                'Valor_Saldo_df1': formatar_moeda,
+                                'Valor_Saldo_df2': formatar_moeda
+                            })
+                            df_comparacao_styled.set_table_styles([{'selector': 'table', 'props': [('height', '1600px')]}])
+                            st.subheader("Comparação Extrato Banco e Razão Relatório :")
+                            st.write(df_comparacao_styled, unsafe_allow_html=True)
+
+                        else:
+                            st.write("As colunas 'VALOR' e/ou 'Saldo-Exercício' e/ou 'Data' não foram encontradas nos arquivos.")
+            
+            # Caso a extensão seja .txt, lê o arquivo como texto
+            elif file_extension == '.txt':
+                texto = ler_texto(uploaded_sicoob)
+                if texto is not None:
+                    st.write("Conteúdo do arquivo de texto:")
+                    df = pd.DataFrame(texto)
+                    df['Data_Mov'] = pd.to_datetime(df['Data_Mov'], format='%Y%m%d')
+                    df['Data_Mov'] = df['Data_Mov'].dt.strftime('%d/%m/%Y')
+                    st.write(df)
+            
+
+
+    elif banco_selecionado == 'Santander':
+        uploaded_santander = st.file_uploader("Selecione Extrato SANTANDER", type=["xlsx", "xls"])
+        # Upload Domínio Extrato Razão
+        uploaded_file2 = st.file_uploader("SELECIONE EXTRATO RAZÃO SISTEMA DOMÍNIO", type=["xlsx", "xls"])
+
+        if uploaded_santander is not None:
+            # Verifica a extensão do arquivo
+            _, file_extension = os.path.splitext(uploaded_santander.name)
+            
+            # Caso a extensão seja .xlsx ou .xls, lê o arquivo como Excel
+            if file_extension in ['.xlsx', '.xls']:
+                    
+                if uploaded_santander is not None and uploaded_file2 is not None:
+                    df1 = load_dataframe(uploaded_santander, header=2)  # Define o cabeçalho na linha 3
+                    df2 = load_dataframe(uploaded_file2, header=6)
+
+                    st.subheader("Conteúdo do arquivo 1")
+                    df1_cleaned = df1.dropna(axis=1, how='all')  # Remove colunas que são todas None
+                    st.write(df1_cleaned)
+
+                    st.subheader("Conteúdo do arquivo 2")
+                    df2_cleaned = df2.dropna(axis=1, how='all')  # Remove colunas que são todas None
+                    st.write(df2_cleaned)
+
+                    if df1_cleaned is not None and df2 is not None:
+                        if 'Saldo (R$)' in df1_cleaned.columns and 'Saldo-Exercício' in df2.columns and 'Data' in df2.columns:
+                            # Remove os valores de texto da coluna 'Data' em df2 e converte para datetime
+                            df2['Data'] = pd.to_datetime(df2['Data'], errors='coerce')
+                            
+                            # Remove as linhas com valores nulos na coluna 'Data'
+                            df2 = df2.dropna(subset=['Data'])
+
+                            df2_last_of_day = df2.groupby(df2['Data'].dt.date).tail(1)
+                            
+                            # Filtra as linhas de df1_cleaned com base na condição
+                            df1_filtered = df1_cleaned[df1_cleaned['Histórico'].str.contains('CONTAMAX', case=False)]
+
+                            # Cria o DataFrame de comparação usando apenas as primeiras min_len linhas de cada DataFrame
+                            df_comparacao = pd.DataFrame({
+                                'Data Saldo Banco': df1_filtered['Data'],
+                                'Valor_Saldo_df1': df1_filtered['Saldo (R$)'],
+                                'Data': df2_last_of_day['Data'].dt.strftime('%d/%m/%Y'),
+                                'Valor_Saldo_df2': df2_last_of_day['Saldo-Exercício']
+                            })
+                            
+                            print(df_comparacao)
+
+                            # Aplicar a função aos dados e estilizar o DataFrame
+                            df_comparacao_styled = df_comparacao.style.apply(highlight_diff, axis=1)
+                            
+                            df_comparacao_styled = df_comparacao_styled.format({
+                                'Valor_Saldo_df1': formatar_moeda,
+                                'Valor_Saldo_df2': formatar_moeda
+                            })
+                            
+                            st.subheader("Comparação Extrato Banco e Razão Relatório :")
+                            st.write(df_comparacao_styled, unsafe_allow_html=True)
+                        else:
+                            st.write("As colunas 'VALOR' e/ou 'Saldo-Exercício' e/ou 'Data' não foram encontradas nos arquivos.")
+
+    elif banco_selecionado == 'Banrisul':
+        uploaded_banrisul = st.file_uploader("Selecione Extrato BANRISUL", type=["xlsx", "xls"])
+        # Upload Domínio Extrato Razão
+        uploaded_file2 = st.file_uploader("SELECIONE EXTRATO RAZÃO SISTEMA DOMÍNIO", type=["xlsx", "xls"])
+
+    elif banco_selecionado == 'Caixa Econômica':
+        uploaded_cef = st.file_uploader("Selecione Extrato CAIXA ECONÔMICA", type=["xlsx", "xls"])
+        # Upload Domínio Extrato Razão
+        uploaded_file2 = st.file_uploader("SELECIONE EXTRATO RAZÃO SISTEMA DOMÍNIO", type=["xlsx", "xls"])
+
+    elif banco_selecionado == 'Bradesco':
+        uploaded_cef = st.file_uploader("Selecione Extrato BRADESCO", type=["xlsx", "xls"])
+        # Upload Domínio Extrato Razão
+        uploaded_file2 = st.file_uploader("SELECIONE EXTRATO RAZÃO SISTEMA DOMÍNIO", type=["xlsx", "xls"])
+    else:
+        st.write("Você nao selelecionou")
+    
+
+    
+
 
 if __name__ == "__main__":
     main()

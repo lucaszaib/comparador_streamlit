@@ -1,9 +1,6 @@
 import streamlit as st
 import pandas as pd
 import os
-import PyPDF2
-from ofxparse import OfxParser
-import tempfile
 
 
 

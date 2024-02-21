@@ -55,6 +55,15 @@ def highlight_diff(row, color='yellow'):
         estilo[row.index.get_loc('Valor_Saldo_df2')] = 'background-color: {}'.format(color)
     return estilo
 
+# Função para destacar as diferenças entre duas colunas
+def highlight_diff_santander(row, color='yellow'):
+    attr = 'background-color: {}'.format(color)
+    estilo = [''] * len(row)
+    if row['Saldo (R$)'] != row['Saldo-Exercício']:
+        estilo[row.index.get_loc('Saldo (R$)')] = 'background-color: {}'.format(color)
+        estilo[row.index.get_loc('Saldo-Exercício')] = 'background-color: {}'.format(color)
+    return estilo
+
 # Função para ler um arquivo de texto
 def ler_texto(file):
     try:
@@ -172,43 +181,42 @@ def main():
 
                     st.subheader("Conteúdo do arquivo 2")
                     df2_cleaned = df2.dropna(axis=1, how='all')  # Remove colunas que são todas None
+                    df2_cleaned['Data'] = pd.to_datetime(df2_cleaned['Data'], errors='coerce').dt.strftime('%d/%m/%Y')
                     st.write(df2_cleaned)
 
-                    if df1_cleaned is not None and df2 is not None:
-                        if 'Saldo (R$)' in df1_cleaned.columns and 'Saldo-Exercício' in df2.columns and 'Data' in df2.columns:
+                    if df1_cleaned is not None and df2_cleaned is not None:
+                        if 'Saldo (R$)' in df1_cleaned.columns and 'Saldo-Exercício' in df2_cleaned.columns and 'Data' in df2_cleaned.columns:
                             # Remove os valores de texto da coluna 'Data' em df2 e converte para datetime
                             df2['Data'] = pd.to_datetime(df2['Data'], errors='coerce')
-                            
-                            # Remove as linhas com valores nulos na coluna 'Data'
-                            df2 = df2.dropna(subset=['Data'])
 
-                            df2_last_of_day = df2.groupby(df2['Data'].dt.date).tail(1)
-                            
-                            # Filtra as linhas de df1_cleaned com base na condição
-                            df1_filtered = df1_cleaned[df1_cleaned['Histórico'].str.contains('CONTAMAX', case=False)]
+                            df1 = df1_cleaned.sort_values(by='Data', ascending=False).groupby('Data').first().reset_index() # DF1 DATAS AGRUPADAS
+                            df1 = df1[['Data', 'Saldo (R$)']]
+                            df2 = df2.groupby(df2['Data'].dt.date).tail(1).sort_values(by='Data')  # DF2 DATAS AGRUPADAS
+                            df2 = df2[['Data', 'Saldo-Exercício']]
+                            df2['Data'] = df2['Data'].dt.strftime('%d/%m/%Y')
 
-                            # Cria o DataFrame de comparação usando apenas as primeiras min_len linhas de cada DataFrame
-                            df_comparacao = pd.DataFrame({
-                                'Data Saldo Banco': df1_filtered['Data'],
-                                'Valor_Saldo_df1': df1_filtered['Saldo (R$)'],
-                                'Data': df2_last_of_day['Data'].dt.strftime('%d/%m/%Y'),
-                                'Valor_Saldo_df2': df2_last_of_day['Saldo-Exercício']
-                            })
                             
-                            print(df_comparacao)
+                            
+                            # Limitando o número de linhas em cada DataFrame para o mesmo tamanho
+                            min_len = min(len(df1), len(df2))
+                            df1 = df1.reset_index()
+                            df2 = df2.reset_index()
+                            
+                            df1 = df1.head(min_len)
+                            df2 = df2.head(min_len)
 
-                            # Aplicar a função aos dados e estilizar o DataFrame
-                            df_comparacao_styled = df_comparacao.style.apply(highlight_diff, axis=1)
-                            
+                            # Mesclar os DataFrames com base nas datas
+                            merged_df = pd.merge(df1, df2, how='outer', on='Data')
+
+                            df_comparacao_styled = merged_df.style.apply(highlight_diff_santander, axis=1)
+
                             df_comparacao_styled = df_comparacao_styled.format({
-                                'Valor_Saldo_df1': formatar_moeda,
-                                'Valor_Saldo_df2': formatar_moeda
+                                'Saldo (R$)': formatar_moeda, 
+                                'Saldo-Exercício': formatar_moeda
                             })
-                            
+                            df_comparacao_styled.set_table_styles([{'selector': 'table', 'props': [('height', '1600px')]}])
                             st.subheader("Comparação Extrato Banco e Razão Relatório :")
                             st.write(df_comparacao_styled, unsafe_allow_html=True)
-                        else:
-                            st.write("As colunas 'VALOR' e/ou 'Saldo-Exercício' e/ou 'Data' não foram encontradas nos arquivos.")
 
     elif banco_selecionado == 'Banrisul':
         uploaded_banrisul = st.file_uploader("Selecione Extrato BANRISUL", type=["xlsx", "xls"])

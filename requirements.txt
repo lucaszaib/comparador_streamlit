@@ -3,3 +3,5 @@ pandas
 xlrd
 openpyxl
 PyPDF2
+ofxparse
+tempfile

@@ -27,7 +27,7 @@ def main():
 
     if uploaded_file is not None:
         # Carregando os dados para um DataFrame
-        df = pd.read_excel(uploaded_file, header=7)
+        df = pd.read_excel(uploaded_file, header=6)
 
         # Adicionando uma coluna para identificar débito/crédito
         df['Debito/Credito'] = df['Saldo-Exercício'].apply(identificar_debito_credito)

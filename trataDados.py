@@ -37,13 +37,16 @@ def definir_header(df, linha_header):
         novo_header = df.iloc[linha_header]
 
         # Preenche valores vazios com uma string padrão
-        novo_header = novo_header.fillna('x')
+        
 
         # Remove a linha do cabeçalho do DataFrame
-        df_sem_header = df.iloc[linha_header + 1:].reset_index(drop=True)
-
+        df_sem_header = df.iloc[linha_header + 1:].reset_index(drop=True).dropna(axis=1, how='all')
+        
+        
         # Define a linha de cabeçalho ajustada como o novo cabeçalho do DataFrame
         df_sem_header.columns = novo_header
+        if len(df_sem_header.columns) == len(df_sem_header.iloc[novo_header]):
+            df_sem_header.columns = df_sem_header.iloc[novo_header]
 
         return df_sem_header
     except Exception as e:

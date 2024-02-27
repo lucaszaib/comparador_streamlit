@@ -70,8 +70,12 @@ def main():
                 # Filtrando os registros com débito (D)
                 df_debito = df_limpo[df_limpo['Debito/Credito'] == 'D']
                 
-                # Ordenando o DataFrame pelos saldos atuais em ordem decrescente
-                df_debito_ordenado = df_debito.sort_values(by='Saldo Atual', ascending=False)
+                if tipo_analise == 'Balancete':
+                    # Ordenando o DataFrame pelos saldos atuais em ordem decrescente
+                    df_debito_ordenado = df_debito.sort_values(by='Saldo Atual', ascending=False)
+                elif tipo_analise == 'Razão':
+                    # Ordenando o DataFrame pelos saldos atuais em ordem decrescente
+                    df_debito_ordenado = df_debito.sort_values(by='Data', ascending=False)
                 
                 st.write(df_debito_ordenado)
 

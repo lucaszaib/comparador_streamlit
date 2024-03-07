@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
+from PyPDF2 import PdfReader
 import os
+import io
 
 
 
@@ -77,6 +79,47 @@ def load_dataframe(uploaded_file, **kwargs):
     else:
         st.error("Formato de arquivo não suportado.")
         return None
+
+def extract_data_from_lines(lines):
+    data_rows = []
+    for line in lines:
+        if "SALDO DIA" in line:
+            data = line.split()
+            # Verificar se a linha contém informações suficientes
+            if len(data) >= 5:
+                # Extrair as informações e dividir em colunas
+                data_row = {
+                    'Data': data[0],
+                    'NrDoc': data[1],
+                    'Histórico': ' '.join(data[2:-2]),
+                    'Valor': data[-2]
+                }
+                data_rows.append(data_row)
+
+    return data_rows
+
+def read_pdf_to_dataframe(uploaded_file):
+    # Ler o conteúdo do arquivo PDF
+    content = uploaded_file.getvalue()
+
+    # Criar um objeto PdfReader
+    pdf_reader = PdfReader(io.BytesIO(content))
+
+    # Extrair o texto de todas as páginas do PDF
+    all_lines = []
+    for page in pdf_reader.pages:
+        text = page.extract_text()
+        lines = text.split('\n')
+        lines = [line.strip() for line in lines if line.strip()]
+        all_lines.extend(lines)
+
+    # Extrair dados das linhas que contêm "SALDO DIA"
+    data_rows = extract_data_from_lines(all_lines)
+
+    # Criar o DataFrame
+    df = pd.DataFrame(data_rows)
+
+    return df
 
 def main():
     st.title("Comparador de Extratos BANCOS x RAZÃO")
@@ -221,9 +264,15 @@ def main():
         uploaded_file2 = st.file_uploader("SELECIONE EXTRATO RAZÃO SISTEMA DOMÍNIO", type=["xlsx", "xls"])
 
     elif banco_selecionado == 'Caixa Econômica':
-        uploaded_cef = st.file_uploader("Selecione Extrato CAIXA ECONÔMICA", type=["xlsx", "xls"])
+        uploaded_cef = st.file_uploader("Selecione Extrato CAIXA ECONÔMICA", type=["pdf"])
+       
         # Upload Domínio Extrato Razão
         uploaded_file2 = st.file_uploader("SELECIONE EXTRATO RAZÃO SISTEMA DOMÍNIO", type=["xlsx", "xls"])
+        
+
+        if uploaded_cef is not None:
+            df = read_pdf_to_dataframe(uploaded_cef)
+            st.write(df)
 
     elif banco_selecionado == 'Bradesco':
         uploaded_cef = st.file_uploader("Selecione Extrato BRADESCO", type=["xlsx", "xls"])

@@ -121,12 +121,18 @@ def read_pdf_to_dataframe(uploaded_file):
     all_lines = []
     for page in pdf_reader.pages:
         text = page.extract_text()
+        #print(text)
         lines = text.split('\n')
         lines = [line.strip() for line in lines if line.strip()]
         all_lines.extend(lines)
+        
+
+    # Filtrar linhas que contêm "https://gerenciador.caixa.gov."
+    filtered_lines = [line for line in all_lines if "DataFinal=" not in line]
+
 
     # Extrair dados das linhas que contêm "SALDO DIA"
-    data_rows = extract_data_from_lines(all_lines)
+    data_rows = extract_data_from_lines(filtered_lines)
 
     # Criar o DataFrame
     df = pd.DataFrame(data_rows)
@@ -315,11 +321,15 @@ def main():
                             
                             df1_cleanedCaixa = df1_cleanedCaixa.head(min_len)
                             df2_cleanedCaixa = df2_cleanedCaixa.head(min_len)
-
+                            
+                            #Convertendo pra Numerico
                             df1_cleanedCaixa['Valor'] = pd.to_numeric(df1_cleanedCaixa['Valor'].str.replace('.', '').str.replace(',', '.'), errors='coerce')
+                            
                             # Mesclar os DataFrames com base nas datas
                             merged_df = pd.merge(df1_cleanedCaixa, df2_cleanedCaixa, how='outer', on='Data')
-                            
+                            # Preencher os valores NaN na coluna "Saldo-Exercício" com os valores correspondentes da coluna "Valor"
+                            merged_df['Saldo-Exercício'].fillna(merged_df['Valor'], inplace=True)
+                            print(merged_df)
                             df_comparacao_styled = merged_df.style.apply(highlight_diff_caixa, axis=1)
 
                             df_comparacao_styled = df_comparacao_styled.format({
@@ -329,9 +339,7 @@ def main():
                             df_comparacao_styled.set_table_styles([{'selector': 'table', 'props': [('height', '1600px')]}])
                             st.subheader("Comparação Extrato Banco e Razão Relatório :")
                             st.write(df_comparacao_styled, unsafe_allow_html=True)
-
-
-                                                                                                            
+                                                                               
                         else:
                             st.write("As colunas 'VALOR' e/ou 'Saldo-Exercício' e/ou 'Data' não foram encontradas nos arquivos.") 
 

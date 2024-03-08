@@ -45,6 +45,8 @@ def formatar_moeda(valor):
     return '{:,.2f}'.format(valor).replace('.', ',')
 
 
+
+
 # Função para destacar as diferenças entre duas colunas
 def highlight_diff(row, color='yellow'):
     attr = 'background-color: {}'.format(color)
@@ -62,6 +64,16 @@ def highlight_diff_santander(row, color='yellow'):
         estilo[row.index.get_loc('Saldo (R$)')] = 'background-color: {}'.format(color)
         estilo[row.index.get_loc('Saldo-Exercício')] = 'background-color: {}'.format(color)
     return estilo
+
+# Função para destacar as diferenças entre duas colunas
+def highlight_diff_caixa(row, color='yellow'):
+    attr = 'background-color: {}'.format(color)
+    estilo = [''] * len(row)
+    if row['Valor'] != row['Saldo-Exercício']:
+        estilo[row.index.get_loc('Valor')] = 'background-color: {}'.format(color)
+        estilo[row.index.get_loc('Saldo-Exercício')] = 'background-color: {}'.format(color)
+    return estilo
+
 
 # Função para ler um arquivo de texto
 def ler_texto(file):
@@ -196,8 +208,6 @@ def main():
                     df['Data_Mov'] = pd.to_datetime(df['Data_Mov'], format='%Y%m%d')
                     df['Data_Mov'] = df['Data_Mov'].dt.strftime('%d/%m/%Y')
                     st.write(df)
-            
-
 
     elif banco_selecionado == 'Santander':
         uploaded_santander = st.file_uploader("Selecione Extrato SANTANDER", type=["xlsx", "xls"])
@@ -265,14 +275,69 @@ def main():
 
     elif banco_selecionado == 'Caixa Econômica':
         uploaded_cef = st.file_uploader("Selecione Extrato CAIXA ECONÔMICA", type=["pdf"])
-       
         # Upload Domínio Extrato Razão
-        uploaded_file2 = st.file_uploader("SELECIONE EXTRATO RAZÃO SISTEMA DOMÍNIO", type=["xlsx", "xls"])
+        uploaded_file2Caixa = st.file_uploader("SELECIONE EXTRATO RAZÃO SISTEMA DOMÍNIO", type=["xlsx", "xls"])
         
-
         if uploaded_cef is not None:
-            df = read_pdf_to_dataframe(uploaded_cef)
-            st.write(df)
+            # Verifica a extensão do arquivo
+            _, file_extension = os.path.splitext(uploaded_cef.name)
+            if file_extension in ['.pdf']:
+
+                if uploaded_cef is not None and uploaded_file2Caixa is not None:
+                    df1 = read_pdf_to_dataframe(uploaded_cef)
+                    df2 = load_dataframe(uploaded_file2Caixa, header=7)
+
+                    st.subheader("Extrato Banco CEF")
+                    df1_cleanedCaixa = df1.dropna(axis=1, how='all')  # Remove colunas que são todas None
+                    st.write(df1_cleanedCaixa)
+
+                    st.subheader("Razão Gerado da Domínio")
+                    df2_cleanedCaixa = df2.dropna(axis=1, how='all')  # Remove colunas que são todas None
+                    st.write(df2_cleanedCaixa)
+
+                    if df1_cleanedCaixa is not None and df2_cleanedCaixa is not None:
+                        if 'Valor' in df1_cleanedCaixa.columns and 'Saldo-Exercício' in df2_cleanedCaixa.columns and 'Data' in df2_cleanedCaixa.columns:
+                            # Remove os valores de texto da coluna 'Data' em df2_cleanedCaixa e converte para datetime
+                            df2_cleanedCaixa['Data'] = pd.to_datetime(df2_cleanedCaixa['Data'], errors='coerce')
+
+                            df1_cleanedCaixa = df1_cleanedCaixa.sort_values(by='Data', ascending=False).groupby('Data').first().reset_index() # df1_cleanedCaixa DATAS AGRUPADAS
+                            df1_cleanedCaixa = df1_cleanedCaixa[['Data', 'Valor']]
+                            df2_cleanedCaixa = df2_cleanedCaixa.groupby(df2_cleanedCaixa['Data'].dt.date).tail(1).sort_values(by='Data')  # df2_cleanedCaixa DATAS AGRUPADAS
+                            df2_cleanedCaixa = df2_cleanedCaixa[['Data', 'Saldo-Exercício']]
+                            df2_cleanedCaixa['Data'] = df2_cleanedCaixa['Data'].dt.strftime('%d/%m/%Y')
+
+                            
+                            
+                            # Limitando o número de linhas em cada DataFrame para o mesmo tamanho
+                            min_len = min(len(df1_cleanedCaixa), len(df2_cleanedCaixa))
+                            df1_cleanedCaixa = df1_cleanedCaixa.reset_index()
+                            df2_cleanedCaixa = df2_cleanedCaixa.reset_index()
+                            
+                            df1_cleanedCaixa = df1_cleanedCaixa.head(min_len)
+                            df2_cleanedCaixa = df2_cleanedCaixa.head(min_len)
+
+                            df1_cleanedCaixa['Valor'] = pd.to_numeric(df1_cleanedCaixa['Valor'].str.replace('.', '').str.replace(',', '.'), errors='coerce')
+                            # Mesclar os DataFrames com base nas datas
+                            merged_df = pd.merge(df1_cleanedCaixa, df2_cleanedCaixa, how='outer', on='Data')
+                            
+                            df_comparacao_styled = merged_df.style.apply(highlight_diff_caixa, axis=1)
+
+                            df_comparacao_styled = df_comparacao_styled.format({
+                                'Valor': formatar_moeda, 
+                                'Saldo-Exercício': formatar_moeda
+                            })
+                            df_comparacao_styled.set_table_styles([{'selector': 'table', 'props': [('height', '1600px')]}])
+                            st.subheader("Comparação Extrato Banco e Razão Relatório :")
+                            st.write(df_comparacao_styled, unsafe_allow_html=True)
+
+
+                                                                                                            
+                        else:
+                            st.write("As colunas 'VALOR' e/ou 'Saldo-Exercício' e/ou 'Data' não foram encontradas nos arquivos.") 
+
+
+
+
 
     elif banco_selecionado == 'Bradesco':
         uploaded_cef = st.file_uploader("Selecione Extrato BRADESCO", type=["xlsx", "xls"])

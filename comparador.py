@@ -160,8 +160,8 @@ def main():
             if file_extension in ['.xlsx', '.xls']:
 
                 if uploaded_sicoob is not None and uploaded_file2 is not None:
-                    df1 = load_dataframe(uploaded_sicoob, header=6)  # Define o cabeçalho na linha 3
-                    df2 = load_dataframe(uploaded_file2)
+                    df1 = load_dataframe(uploaded_sicoob, header=2)  # Define o cabeçalho na linha 3
+                    df2 = load_dataframe(uploaded_file2, header=7)
 
                     st.subheader("Conteúdo do arquivo 1")
                     df1_cleaned = df1.dropna(axis=1, how='all')  # Remove colunas que são todas None
